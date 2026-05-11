@@ -1,0 +1,180 @@
+# --- Azure DevOps Pipeline ----------------------------------------------------
+# Builds and deploys:
+#   • API + embedded React dashboard  ? Azure Container App  (continuous)
+#   • Scheduled optimiser job         ? Azure Container App Job
+#
+# Variable groups required (Pipelines ? Library ? Variable groups):
+#   tst-cloud-opt-dev   (for dev branch)
+#   tst-cloud-opt-test  (for main branch)
+#
+# Required variables in each group (mark secrets as secret in ADO Library):
+#   AZURE_TENANT_ID        Azure AD tenant ID
+#   AZURE_CLIENT_ID        Service principal app ID
+#   AZURE_CLIENT_SECRET    Service principal secret       ? mark as secret
+#   AZURE_SUBSCRIPTION_ID  Azure subscription ID
+#   AZURE_KEYVAULT_URL     e.g. https://tst-test-1.vault.azure.net/
+#   AZURE_STORAGE_ACCOUNT_URL
+#   KV_SECRET_DB_SAS       KV secret name for DB SAS token
+#   KV_SECRET_EXPORTS_SAS  KV secret name for exports SAS token
+#   ACR_PASSWORD           acrtst1 admin password          ? mark as secret
+#   RESOURCE_GROUP    e.g. rg-cloud-opt-dev
+#   ACA_ENVIRONMENT   e.g. cae-cloud-opt-dev
+#
+# Hardcoded (same across envs):
+#   ACR:     acrtst1.azurecr.io
+#   API app: tstapp01
+#   Job app: tstjob01
+#
+# NOTE: The .env file is NOT deployed. All config is injected via the variable
+#       group and passed as container environment variables at deploy time.
+# ------------------------------------------------------------------------------
+
+trigger:
+  branches:
+    include:
+      - main
+      - dev
+
+pr: none
+
+# -- Variable groups & computed values -----------------------------------------
+variables:
+  - ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
+    - group: tst-cloud-opt-test
+    - name: env
+      value: test
+  - ${{ if eq(variables['Build.SourceBranchName'], 'dev') }}:
+    - group: tst-cloud-opt-dev
+    - name: env
+      value: dev
+  - name: acrName
+    value: acrtst1
+  - name: acrLoginServer
+    value: acrtst1.azurecr.io
+  - name: imageTag
+    value: $(Build.BuildId)
+  - name: apiImage
+    value: acrtst1.azurecr.io/cloud-cost-optimizer-api:$(imageTag)
+  - name: jobImage
+    value: acrtst1.azurecr.io/cloud-cost-optimizer-job:$(imageTag)
+
+stages:
+
+# ------------------------------------------------------------------------------
+- stage: Build
+  displayName: Build & Push Images to ACR
+  jobs:
+  - job: BuildAndPush
+    displayName: docker build ? ACR push
+    pool:
+      vmImage: ubuntu-latest
+
+    steps:
+    - checkout: self
+
+    - script: |
+        echo "$(ACR_PASSWORD)" | docker login acrtst1.azurecr.io \
+          --username acrtst1 --password-stdin
+      displayName: Docker login to acrtst1
+
+    - script: |
+        docker build -f Dockerfile.api \
+          -t $(apiImage) \
+          -t acrtst1.azurecr.io/cloud-cost-optimizer-api:latest .
+        docker push $(apiImage)
+        docker push acrtst1.azurecr.io/cloud-cost-optimizer-api:latest
+      displayName: Build & push API image
+
+    - script: |
+        docker build -f Dockerfile.job \
+          -t $(jobImage) \
+          -t acrtst1.azurecr.io/cloud-cost-optimizer-job:latest .
+        docker push $(jobImage)
+        docker push acrtst1.azurecr.io/cloud-cost-optimizer-job:latest
+      displayName: Build & push Job image
+
+
+# ------------------------------------------------------------------------------
+- stage: DeployAPI
+  displayName: Deploy API ? Azure Container App
+  dependsOn: Build
+  jobs:
+  - deployment: DeployAPI
+    displayName: Update Container App (api)
+    environment: $(env)
+    pool:
+      vmImage: ubuntu-latest
+
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureCLI@2
+            displayName: az containerapp update — tstapp01
+            inputs:
+              azureSubscription: sc-tst-cloud-opt-$(env)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az containerapp update \
+                  --name tstapp01 \
+                  --resource-group $(RESOURCE_GROUP) \
+                  --image $(apiImage) \
+                  --set-env-vars \
+                    AZURE_TENANT_ID="$(AZURE_TENANT_ID)" \
+                    AZURE_CLIENT_ID="$(AZURE_CLIENT_ID)" \
+                    AZURE_CLIENT_SECRET="$(AZURE_CLIENT_SECRET)" \
+                    AZURE_SUBSCRIPTION_ID="$(AZURE_SUBSCRIPTION_ID)" \
+                    AZURE_KEYVAULT_URL="$(AZURE_KEYVAULT_URL)" \
+                    AZURE_STORAGE_ACCOUNT_URL="$(AZURE_STORAGE_ACCOUNT_URL)" \
+                    KV_SECRET_DB_SAS="$(KV_SECRET_DB_SAS)" \
+                    KV_SECRET_EXPORTS_SAS="$(KV_SECRET_EXPORTS_SAS)" \
+                    DATABASE_PROVIDER="sqlite" \
+                    AZURE_DB_CONTAINER_NAME="optimizer-db" \
+                    AZURE_EXPORTS_CONTAINER_NAME="optimizer-exports" \
+                    LOCAL_DB_PATH="/tmp/optimizer.db" \
+                    DB_BLOB_NAME="optimizer.db" \
+                    LOCAL_SCRIPTS_DIR="/tmp/deletion_scripts"
+
+
+# ------------------------------------------------------------------------------
+- stage: DeployJob
+  displayName: Deploy Job ? Azure Container App Job
+  dependsOn: Build
+  jobs:
+  - deployment: DeployJob
+    displayName: Update Container App Job (optimiser)
+    environment: $(env)
+    pool:
+      vmImage: ubuntu-latest
+
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureCLI@2
+            displayName: az containerapp job update — tstjob01
+            inputs:
+              azureSubscription: sc-tst-cloud-opt-$(env)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az containerapp job update \
+                  --name tstjob01 \
+                  --resource-group $(RESOURCE_GROUP) \
+                  --image $(jobImage) \
+                  --set-env-vars \
+                    AZURE_TENANT_ID="$(AZURE_TENANT_ID)" \
+                    AZURE_CLIENT_ID="$(AZURE_CLIENT_ID)" \
+                    AZURE_CLIENT_SECRET="$(AZURE_CLIENT_SECRET)" \
+                    AZURE_SUBSCRIPTION_ID="$(AZURE_SUBSCRIPTION_ID)" \
+                    AZURE_KEYVAULT_URL="$(AZURE_KEYVAULT_URL)" \
+                    AZURE_STORAGE_ACCOUNT_URL="$(AZURE_STORAGE_ACCOUNT_URL)" \
+                    KV_SECRET_DB_SAS="$(KV_SECRET_DB_SAS)" \
+                    KV_SECRET_EXPORTS_SAS="$(KV_SECRET_EXPORTS_SAS)" \
+                    DATABASE_PROVIDER="sqlite" \
+                    AZURE_DB_CONTAINER_NAME="optimizer-db" \
+                    AZURE_EXPORTS_CONTAINER_NAME="optimizer-exports" \
+                    LOCAL_DB_PATH="/tmp/optimizer.db" \
+                    DB_BLOB_NAME="optimizer.db" \
+                    LOCAL_SCRIPTS_DIR="/tmp/deletion_scripts"

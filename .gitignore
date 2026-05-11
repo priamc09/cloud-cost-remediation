@@ -1,0 +1,107 @@
+# ─── Environment & Secrets ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+*.egg-link
+MANIFEST
+
+# ─── Virtual Environments ─────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.uv/
+
+# ─── uv ───────────────────────────────────────────────────────────────────────
+uv.lock
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+nosetests.xml
+pytest.ini
+
+# ─── Type Checkers & Linters ──────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.pytype/
+
+# ─── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── Local runtime artefacts ──────────────────────────────────────────────────
+/tmp/
+deletion_scripts/
+*.ps1
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── Node / Dashboard ─────────────────────────────────────────────────────────
+node_modules/
+dashboard/dist/
+dashboard/.vite/
+.npm
+
+# ─── Terraform ────────────────────────────────────────────────────────────────
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform.lock.hcl
+terraform.tfvars
+*.auto.tfvars
+crash.log
+override.tf
+override.tf.json
+# Terraform plan files (may contain resolved secret values in binary or text form)
+*.tfplan
+tfplan
+tfplan_out.txt
+*_out.txt
+# Terraform helper/codegen scripts (generated, not source-of-truth)
+infra/write_kv.py
+infra/gen_tf.py
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+.dockerignore
+
+# ─── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+DESIGN_AND_ARCHITECTURE.md
+word/media/Wolters Kluwer 2026 New Hire Challenge.docx
