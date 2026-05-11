@@ -1,0 +1,20 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install uv --no-cache-dir
+
+COPY pyproject.toml .
+RUN uv pip install --system -r pyproject.toml 2>/dev/null || uv pip install --system \
+    "fastapi>=0.111.0" "uvicorn[standard]>=0.29.0" "pydantic>=2.7.0" \
+    "pydantic-settings>=2.2.1" "sqlalchemy>=2.0.30" "httpx>=0.27.0" \
+    "azure-identity>=1.16.0" "azure-keyvault-secrets>=4.8.0" \
+    "azure-storage-blob>=12.20.0" "python-multipart>=0.0.9" \
+    "python-dotenv>=1.0.1" "aiofiles>=23.2.1"
+
+COPY api/ ./api/
+
+RUN mkdir -p /tmp/optimizer /tmp/deletion_scripts
+
+# The job runs the full pipeline once and exits (used as Container App Job)
+CMD ["python", "-m", "api.routers.jobs"]
